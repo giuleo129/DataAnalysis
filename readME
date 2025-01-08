@@ -1,0 +1,4 @@
+Here are the data analyses for two different projects conducted in R:
+
+most_streamed_song_Spotify, where I used unsupervised learning techniques (cluster analysis, Principal Component Analysis) to identify trends in listener preferences.
+Online_shoppers_intention: in this case, through supervised learning, we tried to capture consumer habits on a website to predict whether a certain user X visiting the site will make a purchase or not.
