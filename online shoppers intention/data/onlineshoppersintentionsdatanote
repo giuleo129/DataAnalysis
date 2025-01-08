@@ -1,0 +1,23 @@
+For information about the data, see:
+
+https://archive.ics.uci.edu/ml/datasets/Online+Shoppers+Purchasing+Intention+Dataset#
+https://www.kaggle.com/henrysue/online-shoppers-intention
+
+
+Target Variable to predicted: "Revenue" (in the training set)
+Two classes : "TRUE", "FALSE"
+
+The folder contains three datasets:
+
+train data: about 80% of the units of the original dataset
+test data: about 20% of the units of the original dataset
+
+The test set does not contain the target variable. The true values of the target variable will be discussed during the exam.
+
+Main steps of the analysis for the report:
+
+1. Provide Exploratory Data Analysis of the training data set
+2. Find the best model for the training data (among those presented in the course)
+3. Apply the model to the test data and predict the target values
+4. Provide the file of the test data with the predicted values
+

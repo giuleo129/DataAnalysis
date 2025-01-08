@@ -1,0 +1,739 @@
+---
+title: "Online Shoppers Intention"
+author: "Giuseppe Leonardi, Barbara Micalizzi, Gaetano De Angelis, Rosario Pavone"
+date: "2024-03-23"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+\$\$The purpose of this report is to outline the training procedure for a dataset aimed at predicting future values of a specific variable. We will utilize the "Online Shoppers Intention" dataset, with approximately 80% of its units allocated to the training set and the remaining 20% to the test set. Our focal variable is "Revenue," which is absent from the test set. Hence, our objective is to forecast future revenue values, thereby predicting, based on user behavior, whether a given user is likely to make a purchase.
+
+The dataset encompasses feature vectors for 12,330 sessions, each representing a distinct user across a one-year timeframe. It has been meticulously curated to mitigate bias towards particular campaigns, special occasions, user profiles, or time periods.
+
+The dataset comprises 18 features, each providing valuable insights into user behavior and website interaction:
+
+**Administrative**: The number of pages of this type (administrative) visited by the user in that session.
+
+**Administrative_Duration**: The total amount of time (in seconds) spent by the user on administrative pages during the session.
+
+**Informational**: The number of informational pages visited by the user in that session.
+
+**Informational_Duration**: The total time spent by the user on informational pages.
+
+**ProductRelated**: The number of product-related pages visited by the user.
+
+**ProductRelated_Duration**: The total time spent by the user on product-related pages.
+
+**BounceRates**: The average bounce rate of the pages visited by the user. The bounce rate is the percentage of visitors who navigate away from the site after viewing only one page.
+
+**ExitRates**: The average exit rate of the pages visited by the user. The exit rate is a metric that shows the percentage of exits from a page.
+
+**PageValues**: The average value of the pages visited by the user. This metric is often used as an indicator of how valuable a page is in terms of generating revenue.
+
+**SpecialDay**: This indicates the closeness of the site visiting time to a specific special day (e.g., Mother's Day, Valentine's Day) in which the sessions are more likely to be finalized with a transaction.
+
+**Month**: The month of the year in which the session occurred.
+
+**OperatingSystems**: The operating system used by the user.
+
+**Browser**: The browser used by the user.
+
+**Region**: The region from which the user is accessing the website.
+
+**TrafficType**: Indica da dove provengono i visitatore di un sito web(direct, paid search, organic search, referral).
+
+**VisitorType**: A categorization of users (e.g., Returning Visitor, New Visitor).
+
+**Weekend**: A boolean indicating whether the session occurred on a weekend.
+
+**Revenue**: A binary variable indicating whether the session ended in a transaction (purchase).
+
+The dataset includes various features about user behavior on a website, such as the number of pages visited in different categories (administrative, informational, product-related) and the duration spent on these pages. There are also features regarding the technical aspects of the visit (operating system, browser, region, traffic type) and some temporal aspects (month, special day, weekend).
+
+The final column, '**Revenue**', that will be our dependent variable, is a boolean indicating whether the visit led to a purchase, making this dataset potentially useful for predictive modeling in e-commerce analytics.
+
+first step of each analysis is the **Exploration of the Data**.
+
+In this part it's possible to find the libraries that will be used in all the analysis that will be done in this report.
+
+```{r}
+#Libreary
+
+library(ggplot2)
+library(visdat)
+library(skimr)
+library(DataExplorer)
+library(corrplot)
+```
+
+```{r}
+
+data_training <- read.csv("C:\\Users\\gabbo\\online_shoppers_intention_train.csv", sep = ",", header = TRUE)[,-c(1)]
+dt_num <- data_training[,-c(12,17,16,18,19)]
+head(data_training)
+attach(data_training)
+skim(data_training)
+summary(data_training)
+
+```
+
+after loading the training set, that we called "*data_training*", we removed the first column of the set because it's redudant with index created by R, and then created a data-set that contain only the numerical variables, called "dt_num". With the Attach command the variables of the data_set are always available.And we show a summary to understand better all the variable that we have in our dataset.
+
+**2.EXPLORATORY DATA ANALYSIS**
+
+2.1 TARGET VARIABLE
+
+The dataset comprises 10 numerical and 8 categorical attributes. The 'Revenue' attribute serves as the class label. Out of the 9,863 sessions, 83.37% (8,337) were instances of the positive class, signifying sessions that concluded with a purchase, while the remaining 15.26% (1,526) were negative class samples that did not culminate in a purchase.
+
+"Administrative," "Administrative Duration," "Informational," "Informational Duration," "Product Related," and "Product Related Duration" denote the count and cumulative time spent on various page categories during each session.
+
+These values are inferred from the URL data of the pages visited by the user and are updated dynamically in real-time as users interact with the site, navigating from one page to another.
+
+The "Bounce Rate," "Exit Rate," and "Page Value" metrics are gauged by "Google Analytics" for individual pages on the e-commerce platform. The "Bounce Rate" for a page indicates the percentage of visitors who land on that page and then depart ("bounce") without triggering any further interactions during the session.
+
+The "Exit Rate" for a specific page is calculated as the percentage of all pageviews to that page that mark the end of a session. Meanwhile, the "Page Value" signifies the average value attributed to a page visited by a user before completing an e-commerce transaction.
+
+The "Special Day" feature signifies the proximity of the visit to a specific significant event (e.g., Mother's Day, Valentine's Day), during which sessions are more likely to result in transactions.
+
+This attribute's value is determined by considering e-commerce dynamics such as the interval between order placement and delivery. For instance, for Valentine's Day, the value is nonzero between February 2 and February 12, zero before and after unless near another special occasion, with a peak value of 1 on February 8.
+
+Additionally, the dataset encompasses information about the operating system, browser, region, traffic type, visitor type (returning or new), a Boolean value denoting whether the visit occurred on a weekend, and the month of the year.
+
+```{r}
+counts_Revenue <- table(factor(data_training$Revenue))
+
+
+counts_df <- as.data.frame(counts_Revenue)
+
+{names(counts_df) <- c("Revenue", "Count")}
+
+ggplot(counts_df, aes(x = "", y = Count, fill = Revenue)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(title = "Distribution of Customers by Revenue",
+       fill = "Revenue",
+       x = NULL,
+       y = NULL) +
+  theme_void() +
+  theme(legend.position = "right")
+
+
+
+```
+
+1.  **Distribution of Revenue**:
+
+    -   The pie chart illustrates the distribution of sessions based on their revenue outcomes. It indicates that the majority of sessions, approximately 83.37%, concluded with a purchase, while the remaining 15.26% did not result in a transaction.
+
+2.  **Imbalance in Revenue Classes**:
+
+    -   The chart reveals a notable imbalance between sessions resulting in purchases and those that do not. This suggests that the dataset is skewed towards sessions with positive revenue outcomes.
+
+3.  **Revenue Impact**:
+
+    -   Understanding the distribution of revenue outcomes is crucial for businesses, as it provides insights into user behavior and helps in optimizing strategies to enhance conversion rates.
+
+4.  **Potential Insights**:
+
+    -   Sessions resulting in purchases constitute the majority, indicating a healthy conversion rate for the e-commerce platform. However, exploring factors contributing to the negative revenue outcomes could unveil opportunities for improvement in user experience or marketing strategies.
+
+5.  **Special Day Influence**:
+
+    -   It would be interesting to analyze how revenue outcomes vary on special occasions compared to regular days. The 'Special Day' feature could potentially have a significant impact on purchase behavior, as sessions near specific events may be more likely to result in transactions.
+
+6.  **Further Analysis**:
+
+    -   Further analysis could involve examining the correlation between different attributes (such as page categories, bounce rate, exit rate, etc.) and revenue outcomes to identify patterns or factors influencing purchase decisions.
+
+7.  **Optimization Strategies**:
+
+    -   Insights from this analysis could guide the optimization of website content, marketing campaigns, and user experience to maximize revenue generation and improve overall performance.
+
+```{r}
+vis_dat(data_training)
+```
+
+Also if there are no missing value, and this graphical represantation may be useless, we want to use vis_dat in order to have a panoramic of our data and understand the types of data; this function may be useful also in order to choose some variables to delete.
+
+```{r}
+data_training$Month <- as.factor(Month)
+data_training$OperatingSystems <- as.factor(OperatingSystems)
+data_training$Browser <- as.factor(Browser)
+data_training$Region <- as.factor(Region)
+data_training$TrafficType <- as.factor(TrafficType)
+data_training$VisitorType <- as.factor(VisitorType)
+data_training$SpecialDay <- as.factor(SpecialDay)
+```
+
+**2,2 DATA EXPLORER**
+
+### Question for the Analysis
+
+1.  **What are the visitor characteristics that most influence the likelihood of generating revenue?**
+
+    -   Explore relationships between existing variables in the dataset and the "Revenue" variable using techniques such as correlation analysis, hypothesis testing, or visualizations.
+
+2.  **Which pages or page categories are most correlated with revenue generation?**
+
+    -   Analyze the frequency and duration of visits to different page categories (e.g., informational pages, product pages, administrative pages) and assess their relationship with the "Revenue" variable.
+
+3.  **Is there a relationship between visitor behavior (e.g., bounce rate, exit rate) and revenue generation?**
+
+    -   Explore how visitor behavior metrics, such as bounce rate and exit rate, are associated with the "Revenue" variable. For example, do visitors who spend more time on the website are more likely to complete a transaction?
+
+4.  **Are there certain days of the week or months of the year more favorable for revenue generation?**
+
+    -   Examine if there are seasonal patterns or specific periods (such as holidays or special events) that influence the likelihood of revenue generation.
+
+5.  **Do demographic or geographic characteristics of visitors influence the likelihood of revenue generation?**
+
+    -   Evaluate if there are differences in purchasing habits among different geographical regions, operating systems, browsers used, or traffic types.
+
+6.  **Are there differences in behavior between new and returning visitors?**
+
+    -   Explore if there are differences in browsing behavior and interaction with the website between new and returning visitors, and how these differences influence revenue generation.
+
+7.  **How do visitor technical characteristics influence the likelihood of revenue generation?**
+
+    -   Examine if visitor technical characteristics, such as the operating system used or browser type, are associated with the "Revenue" variable.
+
+```{r}
+plot_intro(data_training)
+```
+
+```{r fig.height=20, fig.width=20}
+plot_bar(data_training[,- c(17,18)])
+
+```
+
+Specifically, we note that:
+
+-   For the variable "Months," we see that May, November, and March are the months with the highest sales, while January and April are absent in the records. We are not sure of the reasons for this absence, but we assume it could be due to either no registrations or perhaps they were not relevant in terms of sales.
+
+-   For the variables "Browser" and "Operating System," we notice that there is one type more commonly used than the others (number 2). This could be justified by the fact that the majority of users are Android smartphone users with Chrome browser installed. Therefore, it is deduced that this difference may be due to this.
+
+-   For the variable "Regions," the region with the most shopping sessions is Region ONE.
+
+-   For the variable "Traffic Type," we can record that traffic type is 2.
+
+-   For the variable "Visitor Type," we can record that Returning_Visitors outnumber the other categories.
+
+-   for the variable "Special Day" when the value is 1 means that we are close to a holiday, while when the value is close to 0, the visit session was not conducted near a SpecialDay. As we can observe, most of the search sessions are conducted far from SpecialDays.
+
+```{r echo=FALSE}
+
+library(ggplot2)
+library(gridExtra)
+
+# Creazione dei grafici a torta per le variabili "Revenue" e "Weekend"
+pie_chart_revenue <- ggplot(data_training, aes(x = "", fill = Revenue)) +
+  geom_bar(width = 1, stat = "count") +
+  geom_text(aes(label = scales::percent(..count../sum(..count..)), 
+                y = ..count..), 
+            stat = "count", position = position_stack(vjust = 0.5), 
+            size = 3, color = "white") +
+  coord_polar("y", start=0) +
+  labs(fill = "Revenue") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  ggtitle("Revenue")
+
+pie_chart_weekend <- ggplot(data_training, aes(x = "", fill = Weekend)) +
+  geom_bar(width = 1, stat = "count") +
+  geom_text(aes(label = scales::percent(..count../sum(..count..)), 
+                y = ..count..), 
+            stat = "count", position = position_stack(vjust = 0.5), 
+            size = 3, color = "white") +
+  coord_polar("y", start=0) +
+  labs(fill = "Weekend") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  ggtitle("Weekend")
+
+# Unione dei due grafici nella stessa schermata
+combined_pie_chart <- grid.arrange(pie_chart_revenue, pie_chart_weekend, ncol = 2)
+
+# Visualizzazione del grafico combinato
+print(combined_pie_chart)
+
+
+
+
+
+```
+
+Looking at the Pie Charts:
+
+-   85% of sessions end without a purchase.
+
+-   77% of sessions do not occur on the weekend.
+
+```{r}
+plot_histogram(data_training)
+```
+
+In general, as we can see graphically, they have a strong right skewness.
+
+```{r}
+plot_boxplot(data_training, by="Revenue")
+```
+
+In the boxplot above, we have visualized the distribution of our independent variables' data according to the values assumed by the 'Revenue' variable (which, as we know, can be TRUE or FALSE). We notice the presence of some outliers in all the plots. We can observe that "Administrative" and "Administrative Duration" provide similar information, the same conclusions can be drawn for "Informational" and "Informational Duration", and between "Product Related" and "Product Related Duration". Additionally, the variables "Bounce Rates" and "Exit Rates" show a very similar trend, justified by their high correlation.
+
+The variable "Page Values" demonstrates that True values are higher than False values.
+
+```{r}
+plot_qq(data_training,by="Revenue")
+```
+
+**Correlation**
+
+```         
+```
+
+Analyzing, the `corrplot`, we see that the variables with high correlation are:
+
+-   `BounceRates` and `ExitRates`, with a positive correlation of 0.91, and it is obvious because they are both considering the exit-rate of a page;
+
+-   `ProductRelated` and `ProductRelated_Duration` (0.86), and this make sense, because more pages visited of the related products, more time spent on pages of this type;
+
+-   `Administrative`/`AdministrativeDuration` (0.60) and `Informational`/`InformationalDuration` (0.63), for the same reason of the other couple of predictors;
+
+All of the variables mentioned above, are correlated between them, but with a small positive value (from 0.20 to 0.40). The low positive correlation suggests that website visitors engage in diverse and comprehensive exploration of the site's content during a shopping session, rather than focusing solely on one type of page. A variety of visited pages may also reflect effective website design that guides users through an intuitive and informative path during the shopping process.
+
+We can also see that the there's a negative (but not strong) correlation between the variables `BounceRate` and `ExitRate` with the other predictors, and this is due to the fact that if you go away from a page or from the site, you will never see the other page of the site.
+
+### 
+
+```{r}
+library(dplyr)
+dt_num <- select_if(data_training, is.numeric)
+cor_dt <- round(cor(dt_num), 2)
+corrplot(cor_dt, method = "number",type = "upper",tl.cex = 0.6,tl.col = "black",number.cex = 0.7)
+```
+
+```{r}
+library(MASS)
+library(ISLR2)
+str(data_training)
+head(data_training)
+```
+
+```{r}
+contrasts(Revenue)
+```
+
+```{r}
+lm(PageValues~Revenue)-> lm.fit
+summary(lm.fit)
+```
+
+```{r}
+# Install and load the ggplot2 library if not already installed
+install.packages("ggplot2")
+library(ggplot2)
+
+# Create a boxplot to visualize the relationship between PageValues and Revenue
+ggplot(data_training, aes(x = Revenue, y = PageValues, fill = Revenue)) +
+  geom_boxplot() +
+  labs(x = "Revenue", y = "PageValues") +
+  theme_minimal()
+
+
+
+```
+
+```{r}
+
+barplot(tapply(PageValues, Revenue, mean), names.arg = c("FALSE", "TRUE"), ylab = "Mean PageValues", col = c("red", "blue"), main = "Mean PageValues by Revenue")
+
+```
+
+```{r}
+ glm_model <- glm(formula = Revenue ~ ., family = "binomial", data = data_training)
+summary(glm_model)
+```
+
+Performing a logistic regression on our training set considering all variables did not yield very satisfactory results.
+
+Specifically, significant coefficients were found for the variables ExitRates, PageValues, Month, and TrafficType.
+
+Residual Deviance and Null Deviance: These metrics measure how well the model fits the data. The residual deviance should be significantly lower than the null deviance to indicate that the model improves upon a model with no predictors.
+
+Examining the values of deviance, which represent how well the model fits our data, the null deviance was 8498.1 on 9862 degrees of freedom, and the residual deviance was 5665.7 on 9792 degrees of freedom.
+
+**Null Deviance**:
+
+-   **Value**: 8498.1 on 9862 degrees of freedom.
+
+-   The null deviance measures the fit of a model that includes only the intercept (no predictors). It provides a baseline for comparison and indicates how well the model performs without any predictors.
+
+-   A higher null deviance suggests that the model without predictors does not fit the data well.
+
+**Residual Deviance**:
+
+-   **Value**: 5665.7 on 9792 degrees of freedom.
+
+-   The residual deviance measures the fit of the model with the chosen predictors. It indicates how well the model performs when accounting for the effects of the predictors.
+
+-   A lower residual deviance compared to the null deviance suggests that the model with predictors explains more variance in the data and provides a better fit.
+
+**AIC**: 5807.7
+
+-   The AIC is an indicator of model quality. A lower AIC is preferable as it balances model complexity and goodness of fit.
+
+**Number of Fisher Scoring Iterations**: 14
+
+-   This number represents the iterations required for the model to converge to a stable solution. A reasonable number of iterations (as seen here) suggests a reliable fitting process.
+
+Adesso abbiamo provato ad analizzare
+
+```{r}
+ # Fit an initial model
+ initial_model <- glm(Revenue ~ 1, family = binomial, data = data_training)  # Starting with the intercept-only model
+ 
+ # Perform stepwise model selection
+ stepwise_model <- step(initial_model, scope = list(lower = initial_model, upper = glm_model_significant),
+                        direction = "both", data = data_training)
+
+```
+
+Performing a logistic regression on our training set using the predictors **`ExitRates`**, **`PageValues`**, and **`Month`** yielded more targeted insights.
+
+Significant coefficients were found for the predictors **`ExitRates`**, **`PageValues`**, and specific months (February, March, May, and November), highlighting their impact on the model.
+
+### **Deviance Analysis:**
+
+-   **Residual Deviance and Null Deviance**:
+
+    -   These metrics assess the model's fit to the data. The residual deviance should be substantially lower than the null deviance to indicate that the model improves upon one with no predictors.
+
+-   **Values**:
+
+    -   **Null Deviance**: 8498.1 on 9862 degrees of freedom
+
+        -   This metric measures the fit of a model that includes only the intercept (no predictors). It serves as a baseline for comparison.
+
+    -   **Residual Deviance**: 5799.1 on 9851 degrees of freedom
+
+        -   This metric measures the fit of the model with the chosen predictors.
+
+-   **Conclusion**:
+
+    -   The lower residual deviance compared to the null deviance suggests the model with predictors provides a better fit to the data.
+
+### **Model Evaluation:**
+
+-   **AIC**: 5823.1
+
+    -   This measure balances model complexity with goodness of fit. A lower AIC is preferable, indicating a better model.
+
+-   **Number of Fisher Scoring Iterations**: 7
+
+    -   This represents the number of iterations needed for the model to converge to a stable solution. A reasonable number of iterations, as seen here, suggests a stable fitting process.
+
+```{r}
+# Calcola i valori predetti
+predicted_values <- predict(glm_model_significant, type = "response")
+
+# Visualizza i primi 10 valori predetti
+head(predicted_values)
+```
+
+### **Code Analysis:**
+
+1.  **Calculate Predicted Values**:
+
+    -   **`predicted_values <- predict(glm_model_significant, type = "response")`**: This line of code calculates the predicted values using the **`glm_model_significant`** model. The argument **`type = "response"`** specifies that the predicted values should be returned as probabilities (ranging from 0 to 1), which is typical for a binomial model.
+
+2.  **Display the First 10 Predicted Values**:
+
+    -   **`head(predicted_values)`**: This function displays the first 10 values from the **`predicted_values`** object. This allows you to get an overview of the predicted values.
+
+### **Interpretation of Results:**
+
+-   The predicted values are probabilities representing the likelihood that the observation belongs to the positive class (**`Revenue = Yes`**). The values range from 0 to 1:
+
+    -   A value close to 0 indicates a low probability of belonging to the positive class (**`Revenue = No`**).
+
+    -   A value close to 1 indicates a high probability of belonging to the positive class (**`Revenue = Yes`**).
+
+-   **Example Interpretation**:
+
+    -   **`0.10328283`**: This value indicates a low probability (around 10.3%) that the first observation belongs to the positive class.
+
+    -   **`0.71717730`**: This value indicates a high probability (around 71.7%) that the second observation belongs to the positive class.
+
+    -   **`0.61600382`**: This value indicates a moderate probability (around 61.6%) that the third observation belongs to the positive class.
+
+### **Further Actions:**
+
+-   **Classification**: You can convert the predicted probabilities into binary classes (0 or 1) using a threshold (for example, 0.5).
+
+-   **Model Evaluation**: Evaluate the model's performance by comparing the predicted values with the actual values and calculating metrics such as accuracy, recall, F1 score, and ROC curve.
+
+-   **Model Improvement**: If the predicted values are not satisfactory, you may consider adding more predictors or experimenting with more complex models.
+
+```{r}
+# Ottenere le previsioni del modello
+predicted <- predict(glm_model, type = "response")
+
+# Trasformare le previsioni in etichette di classe binarie (0 o 1) usando una soglia (ad esempio 0.5)
+predicted_class <- ifelse(predicted > 0.5, 1, 0)
+
+# Calcolare l'accuratezza
+accuracy <- mean(predicted_class == data_training$Revenue)
+accuracy
+
+```
+
+```         
+```
+
+```{r}
+# Calc
+```
+
+```{r}
+
+```
+
+```{ulate predicted values}
+predicted_values <- predict(glm_model, type = "response")
+
+# Calculate R-squared
+SSR <- sum((predicted_values - mean(data_training$Revenue))^2)
+SST <- sum((data_training$Revenue - mean(data_training$Revenue))^2)
+R_squared <- SSR / SST
+
+# Calculate Adjusted R-squared
+n <- nrow(data_training)
+p <- length(coefficients(glm_model)) - 1  # Number of predictors (excluding intercept)
+Adjusted_R_squared <- 1 - (1 - R_squared) * (n - 1) / (n - p - 1)
+
+# Print R-squared and Adjusted R-squared
+print(paste("R-squared:", round(R_squared, 4)))
+print(paste("Adjusted R-squared:", round(Adjusted_R_squared, 4)))
+
+```
+
+```{r}
+residui <- residuals(glm_model_significant)
+plot(glm_model_significant$fitted.values, residui, ylab = "Residui", xlab = "Valori predetti", main = "Residui vs Valori predetti")
+abline(h = 0, col = "red")
+hist(residui, breaks = 30, main = "Distribuzione dei residui")
+qqnorm(residui)
+qqline(residui)
+```
+
+```{r}
+# Assuming the fitted model is called 'glm_model' and the data set is called 'data_training'
+# Make predictions (predicted probabilities)
+glm_probs <- predict(glm_model_significant, type = "response")
+
+# Convert probabilities to categorical outcomes using a threshold of 0.2
+glm_pred <- ifelse(glm_probs > 0.2, "Yes", "No")
+
+# Create the confusion matrix
+confusion_matrix <- table(Predicted = glm_pred, Actual = data_training$Revenue)
+
+# Print the confusion matrix
+print(confusion_matrix)
+
+```
+
+-   **True Negatives (TN)**: This is the number of instances where the actual class was "No" and the predicted class was also "No." This is the top-left cell, which is 7472.
+
+-   **False Positives (FP)**: This is the number of instances where the actual class was "No" but the predicted class was "Yes." This is the top-right cell, which is 495.
+
+-   **False Negatives (FN)**: This is the number of instances where the actual class was "Yes" but the predicted class was "No." This is the bottom-left cell, which is 865.
+
+-   **True Positives (TP)**: This is the number of instances where the actual class was "Yes" and the predicted class was also "Yes." This is the bottom-right cell, which is 1031.
+
+From this confusion matrix, you can compute several performance metrics:
+
+-   **Accuracy**: The proportion of all correct predictions (both true negatives and true positives) out of all predictions. It's calculated as:
+
+    Accuracy=𝑇𝑁+𝑇𝑃𝑇𝑁+𝐹𝑃+𝐹𝑁+𝑇𝑃Accuracy=TN+FP+FN+TPTN+TP​ Accuracy=7472+10317472+495+865+1031=85039863=0.8614 or 86.14%Accuracy=7472+495+865+10317472+1031​=98638503​=0.8614 or 86.14%
+
+-   **Precision**: The proportion of true positives out of all positive predictions made (i.e., how many of the predicted "Yes" are actual "Yes"). It's calculated as:
+
+    Precision=𝑇𝑃𝑇𝑃+𝐹𝑃Precision=TP+FPTP​ Precision=10311031+495=10311526=0.6754 or 67.54%Precision=1031+4951031​=15261031​=0.6754 or 67.54%
+
+-   **Recall**: The proportion of true positives out of all actual positives (i.e., how many of the actual "Yes" are correctly predicted as "Yes"). It's calculated as:
+
+    Recall=𝑇𝑃𝑇𝑃+𝐹𝑁Recall=TP+FNTP​ Recall=10311031+865=10311896=0.544 or 54.4%Recall=1031+8651031​=18961031​=0.544 or 54.4%
+
+-   **F1 Score**: The harmonic mean of precision and recall, calculated as:
+
+    F1 Score=2×(Precision×RecallPrecision+Recall)F1 Score=2×(Precision+RecallPrecision×Recall​) F1 Score=2×(0.6754×0.5440.6754+0.544)=0.6027 or 60.27%F1 Score=2×(0.6754+0.5440.6754×0.544​)=0.6027 or 60.27%
+
+From these metrics, the model has decent overall accuracy, but the precision is moderate, indicating that some false positives exist (predicting "Yes" when actual outcome is "No"). The recall is relatively high, suggesting that the model is good at identifying actual positive cases, which can be important depending on the context. Overall, the model may need some tuning to improve its precision and balance between the two metrics.
+
+```{r}
+library(MASS)
+library(naivebayes)
+
+# Fit LDA model
+lda_fit <- lda(formula = Revenue ~ ExitRates + PageValues + Month , family = binomial, data = data_training)
+
+# Print the LDA fit summary
+summary(lda_fit)
+
+```
+
+```{r}
+# Predict with LDA model
+lda_predictions <- predict(lda_fit, data_training)
+
+# Extract the predicted classes (categorical outcomes)
+lda_pred <- lda_predictions$class
+
+# Create the confusion matrix
+confusion_matrix <- table(Predicted = lda_pred, Actual = data_training$Revenue)
+
+# Print the confusion matrix
+print(confusion_matrix)
+
+```
+
+```{r}
+qda_fit <- qda(formula = Revenue ~ ExitRates + PageValues + Month , family = binomial, data = data_training)
+
+# Print the LDA fit summary
+summary(qda_fit)
+
+```
+
+```{r}
+# Predict with LDA model
+qda_predictions <- predict(qda_fit, data_training)
+
+# Extract the predicted classes (categorical outcomes)
+qda_pred <- qda_predictions$class
+
+# Create the confusion matrix
+confusion_matrix <- table(Predicted = qda_pred, Actual = data_training$Revenue)
+
+# Print the confusion matrix
+print(confusion_matrix)
+```
+
+```{r}
+# Load necessary libraries
+library(naivebayes)
+
+# Fit the Naive Bayes model
+nb_fit <- naive_bayes(Revenue ~ ExitRates + PageValues + Month, data = data_training, usekernel = FALSE)
+
+# Ensure the predictors used in prediction match those used during training
+data_training_matched <- data_training[, c("ExitRates", "PageValues", "Month")]
+
+# Make predictions with the Naive Bayes model
+nb_predictions <- predict(nb_fit, data_training_matched)
+
+# Check the structure of nb_predictions
+str_nb_predictions <- str(nb_predictions)
+
+# Handle the predictions based on the structure
+if (is.atomic(nb_predictions)) {
+    # If nb_predictions is an atomic vector, use it directly as the predicted classes
+    nb_pred <- nb_predictions
+} else {
+    # If nb_predictions is a list with a class component, extract the class attribute
+    nb_pred <- nb_predictions$class
+}
+
+# Create the confusion matrix
+confusion_matrix_nb <- table(Predicted = nb_pred, Actual = data_training$Revenue)
+
+# Print the confusion matrix
+print(confusion_matrix_nb)
+
+# Print the structure of nb_predictions for your reference
+print(str_nb_predictions)
+
+```
+
+```{r}
+# Load necessary libraries
+library(MASS)
+library(naivebayes)
+
+# Define a function to calculate performance metrics
+calculate_metrics <- function(confusion_matrix) {
+    # Extract values from the confusion matrix
+    TN <- confusion_matrix[1, 1]  # True negatives
+    FP <- confusion_matrix[1, 2]  # False positives
+    FN <- confusion_matrix[2, 1]  # False negatives
+    TP <- confusion_matrix[2, 2]  # True positives
+    
+    # Calculate accuracy
+    accuracy <- (TP + TN) / sum(confusion_matrix)
+    
+    # Calculate precision
+    precision <- ifelse((TP + FP) > 0, TP / (TP + FP), NA)
+    
+    # Calculate recall
+    recall <- ifelse((TP + FN) > 0, TP / (TP + FN), NA)
+    
+    # Calculate F1 score
+    F1_score <- ifelse((precision + recall) > 0, 2 * (precision * recall) / (precision + recall), NA)
+    
+    # Return a named vector with the metrics
+    return(c(accuracy = accuracy, precision = precision, recall = recall, F1_score = F1_score))
+}
+
+# Fit the models
+lda_fit <- lda(formula = Revenue ~ ExitRates + PageValues + Month, data = data_training)
+qda_fit <- qda(formula = Revenue ~ ExitRates + PageValues + Month, data = data_training)
+nb_fit <- naive_bayes(Revenue ~ ExitRates + PageValues + Month, data = data_training, usekernel = FALSE)
+glm_fit <- glm(formula = Revenue ~ ExitRates + PageValues + Month, family = binomial, data = data_training)
+
+# Make predictions and calculate confusion matrices
+lda_predictions <- predict(lda_fit, data_training)$class
+qda_predictions <- predict(qda_fit, data_training)$class
+
+data_training_matched <- data_training[, c("ExitRates", "PageValues", "Month")]
+nb_predictions <- predict(nb_fit, data_training_matched)
+
+# Handle nb_predictions structure
+if (is.atomic(nb_predictions)) {
+    nb_pred <- nb_predictions
+} else {
+    nb_pred <- nb_predictions$class
+}
+
+glm_predictions <- predict(glm_fit, data_training, type = "response")
+glm_pred <- ifelse(glm_predictions > 0.5, "TRUE", "FALSE")
+
+# Calculate confusion matrices
+confusion_matrix_lda <- table(Predicted = lda_predictions, Actual = data_training$Revenue)
+confusion_matrix_qda <- table(Predicted = qda_predictions, Actual = data_training$Revenue)
+confusion_matrix_nb <- table(Predicted = nb_pred, Actual = data_training$Revenue)
+confusion_matrix_glm <- table(Predicted = glm_pred, Actual = data_training$Revenue)
+
+# Calculate performance metrics for each model
+lda_metrics <- calculate_metrics(confusion_matrix_lda)
+qda_metrics <- calculate_metrics(confusion_matrix_qda)
+nb_metrics <- calculate_metrics(confusion_matrix_nb)
+glm_metrics <- calculate_metrics(confusion_matrix_glm)
+
+# Combine metrics into one row in a data frame
+comparison_df <- data.frame(
+    Model = c("LDA", "QDA", "Naive Bayes", "GLM"),
+    Accuracy = c(lda_metrics["accuracy"], qda_metrics["accuracy"], nb_metrics["accuracy"], glm_metrics["accuracy"]),
+    Precision = c(lda_metrics["precision"], qda_metrics["precision"], nb_metrics["precision"], glm_metrics["precision"]),
+    Recall = c(lda_metrics["recall"], qda_metrics["recall"], nb_metrics["recall"], glm_metrics["recall"]),
+    F1_Score = c(lda_metrics["F1_score"], qda_metrics["F1_score"], nb_metrics["F1_score"], glm_metrics["F1_score"])
+)
+
+# Print the comparison data frame
+print(comparison_df)
+
+```
+
+...

@@ -1,0 +1,734 @@
+---
+title: "Online Shoppers Intention"
+author: "Giuseppe Leonardi, Barbara Micalizzi, Gaetano De Angelis, Rosario Pavone"
+output:
+  pdf_document: 
+    toc: true
+    toc_depth: 4
+    keep_tex: true
+  html_notebook: default
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(skimr)
+library(DataExplorer)
+library(visdat)
+library(corrplot)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(psych)
+library(tidyr)
+library(caret)
+library(glmnet)
+library(MASS)
+library(naivebayes)
+library(ROCR)
+library(pROC)
+library(openxlsx)
+
+online_shop <- read.csv("C:/Users/leona/Desktop/Università/DATA SCIENCE/Statistical Learning (6 cfu)/REPORT/online shoppers intention/data/online_shoppers_intention_train.csv", stringsAsFactors=TRUE)[,-c(1)]
+set.seed(123)
+train_index <- sample(seq_len(nrow(online_shop)), size = 0.8 * nrow(online_shop))
+dt_train <- online_shop[train_index, ]
+dt_validation <- online_shop[-train_index, ]
+attach(dt_train)
+
+dt_num <-  dt_train[,-c(10:18)]
+dt_scale <- scale(dt_num)
+
+dt_test <- read.csv("C:/Users/leona/Desktop/Università/DATA SCIENCE/Statistical Learning (6 cfu)/REPORT/online shoppers intention/data/online_shoppers_intention_test.csv")[-1]
+
+col_names <- names(dt_test)
+dt_test <- dt_test[, c(ncol(dt_test), 1:(ncol(dt_test)-1))]
+```
+
+\newpage
+
+# Introduction
+
+The purpose of this report is to outline the training procedure for a data-set aimed at predicting future values of a specific variable. We will utilize the "Online Shoppers Intention" data-set, with approximately 80% of its units allocated to the training set and the remaining 20% to the test set. Our focal variable is "Revenue," which is absent from the test set. Hence, our objective is to forecast future revenue values, thereby predicting, based on user behavior, whether a given user is likely to make a purchase.
+
+The data-set encompasses feature vectors for 12,330 sessions, each representing a distinct user across a one-year time-frame. It has been meticulously curated to mitigate bias towards particular campaigns, special occasions, user profiles, or time periods.
+
+The 18 features of the data-set are the following:
+
+**Administrative**: The number of pages of this type (administrative) visited by the user in that session.
+
+**Administrative_Duration**: The total amount of time (in seconds) spent by the user on administrative pages during the session.
+
+**Informational**: The number of informational pages visited by the user in that session.
+
+**Informational_Duration**: The total time spent by the user on informational pages.
+
+**ProductRelated**: The number of product-related pages visited by the user.
+
+**ProductRelated_Duration**: The total time spent by the user on product-related pages.
+
+**BounceRates**: The average bounce rate of the pages visited by the user. The bounce rate is the percentage of visitors who navigate away from the site after viewing only one page.
+
+**ExitRates**: The average exit rate of the pages visited by the user. The exit rate is a metric that shows the percentage of exits from a page.
+
+**PageValues**: The average value of the pages visited by the user. This metric is often used as an indicator of how valuable a page is in terms of generating revenue.
+
+**SpecialDay**: This indicates the closeness of the site visiting time to a specific special day (e.g., Mother’s Day, Valentine's Day) in which the sessions are more likely to be finalized with a transaction.
+
+**Month**: The month of the year in which the session occurred.
+
+**OperatingSystems**: The operating system used by the user.
+
+**Browser**: The browser used by the user.
+
+**Region**: The region from which the user is accessing the website.
+
+**TrafficType**: Refers to the source from which visitor come to a website (e.g. direct, paid search, organic search, referral).
+
+**VisitorType**: A categorization of users (e.g., Returning Visitor, New Visitor).
+
+**Weekend**: A Boolean indicating whether the session occurred on a weekend.
+
+**Revenue**: A binary variable indicating whether the session ended in a transaction (purchase).
+
+The variables type are:
+
+```{r echo=FALSE, fig.height=2.7, fig.width=6.5}
+vis_dat(dt_train)
+```
+
+So, looking at the plot above, we observe that there are no missing values and the variables are categorized as follows:
+
+-   seven integer variables;
+
+-   seven float variables;
+
+-   two logical variables;
+
+-   two categorical variables;
+
+The variables `OperatingSystems`, `Browser`, `Region`,`TrafficType` and `SpecialDay` are classified as integer, but all of this variables are in fact categorical, so *we decide to transform the already mentioned them* (see the appendix for the code).
+
+```{r include=FALSE}
+dt_train$OperatingSystems <- as.factor(OperatingSystems)
+dt_train$Browser <- as.factor(Browser)
+dt_train$Region <- as.factor(Region)
+dt_train$TrafficType <- as.factor(TrafficType)
+dt_train$SpecialDay <- as.factor(SpecialDay)
+
+dt_validation$OperatingSystems <- as.factor(dt_validation$OperatingSystems)
+dt_validation$Browser <- as.factor(dt_validation$Browser)
+dt_validation$Region <- as.factor(dt_validation$Region)
+dt_validation$TrafficType <- as.factor(dt_validation$TrafficType)
+dt_validation$SpecialDay <- as.factor(dt_validation$SpecialDay)
+
+dt_test$OperatingSystems <- as.factor(dt_test$OperatingSystems)
+dt_test$Browser <- as.factor(dt_test$Browser)
+dt_test$Region <- as.factor(dt_test$Region)
+dt_test$TrafficType <- as.factor(dt_test$TrafficType)
+dt_test$SpecialDay <- as.factor(dt_test$SpecialDay)
+```
+
+The data-set includes various features about user behavior on a website, such as the number of pages visited in different categories (administrative, informational, product-related) and the duration spent on these pages. There are also features regarding the technical aspects of the visit (operating system, browser, region, traffic type) and some temporal aspects (month, special day, weekend).
+
+The final column, '**`Revenue`**', that will be our dependent variable, is a Boolean indicating whether the visit led to a purchase, making this data-set potentially useful for predictive modeling in e-commerce analytics.
+
+# Question for the Analysis
+
+1.  What are the visitor characteristics that most influence the probability of generating revenue? Is there a relationship between visitor behavior (e.g., bounce rate, exit rate) and revenue generation?
+
+2.  Are there certain days of the week or months of the year more favorable for revenue generation? Do demographic or geographic characteristics of visitors influence the probability of revenue generation?
+
+3.  Are there differences in behavior between new and returning visitors? How do visitor technical characteristics influence the probability of revenue generation?
+
+\newpage
+
+# Exploratory Data Analysis
+
+Let's start the analysis with a focus on the principal measures for the numerical variables:
+
+```{r eval=FALSE, include=FALSE, paged.print=TRUE}
+describe(dt_train, ranges = FALSE, omit = TRUE)
+```
+
+|                         |  mean   |   sd    | skew | kurtosis |  se   |
+|------------------------:|:-------:|:-------:|:----:|:--------:|:-----:|
+|          Administrative |  2.32   |  3.34   | 1.96 |   4.73   | 0.04  |
+| Administrative_Duration |  80.48  | 175.51  | 5.58 |  50.09   | 1.98  |
+|           Informational |  0.50   |  1.25   | 3.58 |  17.30   | 0.01  |
+|  Informational_Duration |  34.13  | 137.16  | 7.46 |  75.42   | 1.54  |
+|          ProductRelated |  31.88  |  45.15  | 4.39 |  31.46   | 0.51  |
+| ProductRelated_Duration | 1191.49 | 1944.29 | 7.89 |  162.78  | 21.89 |
+|             BounceRates |  0.02   |  0.05   | 2.92 |   7.49   | 0.00  |
+|               ExitRates |  0.04   |  0.05   | 2.12 |   3.87   | 0.00  |
+|              PageValues |  5.92   |  18.84  | 6.57 |  70.48   | 0.21  |
+
+Each variable presents different measures, except for `BounceRates` and `ExitRate`, which can be considered quite similar in terms of both mean and standard deviation.
+
+Variables related to the time spent on a page (`%%_Duration`) indicate that, on average, the users spent more time on pages of similar products. However, this observation is more subjective due to the variability indicated by the standard deviation. Conversely, other variables suggest less time spent on average on such pages, but with a lower standard deviation, implying that users spend roughly the same amount of time on pages of this type.
+
+For the same reasons, variables expressing the number of pages of one type visited by a user show higher values for pages of similar products and less values on page of Administration and Informational.
+
+the high Kurtosis for each variable (some so much more than others) indicates that there are more data points concentrated in the central part of the distribution and fewer data points in the tails. Heavier tails may indicate the presence of outliers, which are extreme values that deviate significantly from the mean.
+
+\newpage
+
+## Visualization
+
+The analysis of the categorical variables give us some suggestion:
+
+```{r echo=FALSE, fig.height=7, fig.width=8, message=FALSE, warning=FALSE}
+ggplot(tidyr::gather(dt_train[10:17]), aes(value, fill = key)) +
+  geom_bar(alpha = 0.5, show.legend = FALSE) +
+  facet_wrap(~ key, scales = "free") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 75, hjust = 1))
+```
+
+we note that:
+
+-   For the variable `Months`, we see that `May`, `November`, and `March` are the months with the highest sales, while January and April are absent in the records. We are not sure of the reasons for this absence, but we assume it could be due to either no registrations or perhaps they were not relevant in terms of sales.
+
+-   For the variables `Browser` and `Operating System`, we notice that there is one type more commonly used than the others (number `2`). This could be justified by the fact that the majority of users are Android smartphone users with Chrome browser installed. Therefore, it is deduced that this difference may be due to this.
+
+-   for the variable `Special Day` when the value is 1 means that we are close to a holiday, while when the value is 0, the visit session was not conducted near a Special Day. As we can observe, most of the search sessions are conducted far from Special days.
+
+As we can see from the density plots belove, *the features of our data set don't meet the **normality assumption**.*
+
+```{r echo=FALSE}
+ggplot(gather(dt_num), aes(value, fill = key)) +
+  geom_density(alpha = 0.5, show.legend = FALSE) +
+  facet_wrap(~ key, scales = "free") +
+  theme_minimal()
+```
+
+all this data presents a ***right-skewed distribution.*** It is evident that exitRates exhibit significant variability, as all its values repeat more or less frequently, also concentrating around values close to zero. A similar pattern can be observed for BounceRates. All other variables show minimal fluctuations, with very few outliers.
+
+## Correlation
+
+```{r echo=FALSE, paged.print=TRUE}
+cor_dt <- round(cor(dt_num),2)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(cor_dt, method="color", col=col(200),type="upper", addCoef.col = "black", tl.col="black", tl.srt=45, tl.cex = 0.6, number.cex = 0.7)
+```
+
+The variables with high correlation are:
+
+-   `BounceRates` and `ExitRates`, with a positive correlation of 0.91, and it is obvious because they are both considering the exit-rate of a page;
+
+-   `ProductRelated` and `ProductRelated_Duration` (0.86), and this make sense, because more pages visited of the related products, more time spent on pages of this type;
+
+-   `Administrative`/`AdministrativeDuration` (0.60) and `Informational`/`InformationalDuration` (0.63), for the same reason of the other couple of predictors;
+
+All of the variables mentioned above, are correlated between them, but with a small positive value (from 0.20 to 0.40). The low positive correlation suggests that website visitors engage in diverse and comprehensive exploration of the site's content during a shopping session, rather than focusing solely on one type of page. A variety of visited pages may also reflect effective website design that guides users through an intuitive and informative path during the shopping process.
+
+We can also see that the there's a negative (but not strong) correlation between the variables `BounceRate` and `ExitRate` with the other predictors, and this is due to the fact that if you go away from a page or from the site, you will never see the other page of the site.
+
+\newpage
+
+## Target Variable
+
+`Revenue` can assume two value:
+
+-   **False**, if the session of shopping doesn't end with a purchase;
+
+-   **True**, when the session ends with a purchase.
+
+```{r echo=FALSE}
+table(Revenue)
+```
+
+Most of the time, the session will end without a purchase.
+
+```{r echo=FALSE}
+plot_boxplot(dt_train,by="Revenue")
+```
+
+As expected, the plots that explain the values connected to the pages (`Administrative`, `Informational` and so on) have greater value in the class TRUE, so the users that spent more time on the page of a website, maybe can have a greatest probability to do a purchase online than who doesn't.
+
+Conversely, the value of `BounceRates` and `ExitRates` are greater in the class FALSE (as expected, because if you go out from a page it's unlikely you to do a purchase).
+
+\newpage
+
+# Classification
+
+First of all, considering the amount of feauters in our data set, we consider to reduce the number of variables that will be useful to predict our target variable. after some analisys based on the value of the AIC (see the appendix for the complete procedure), we choose the following model, that have the smallest AIC:
+
+```         
+Call:
+glm(formula = Revenue ~ Informational + ProductRelated_Duration + 
+    BounceRates + ExitRates + PageValues + Month + VisitorType + 
+    Weekend, family = "binomial", data = dt_train)
+```
+
+So, the next step is to fit a model on this features and see the goodness of fit of that.
+
+## Logistic Regression
+
+```{r warning=FALSE, include=FALSE}
+glm_model <- glm(formula = Revenue ~ Informational + ProductRelated_Duration + 
+    BounceRates + ExitRates + PageValues + Month +
+    VisitorType + Weekend, family = "binomial", data = dt_train)
+summary(glm_model)
+```
+
+fitting a logistic regression on the data set specified above, we obtain the following results:
+
+```         
+    Null deviance: 6802.5  on 7889  degrees of freedom
+Residual deviance: 4518.2  on 7872  degrees of freedom
+AIC: 4554.2
+
+Number of Fisher Scoring iterations: 7
+```
+
+Giving a look at the summary of the model (in the appendix), we see that:
+
+-   `Informational`, `ProductRelated_Duration`, `ExitRates`, and `PageValues` and others have statistically significant coefficients, implying that they are associated with the probability of a purchase.
+
+-   *Categorical* *variables* such as `Month`, `VisitorType`, and `TrafficType` have levels that are significantly associated with the probability of a purchase, as indicated by their coefficients.
+
+-   The significant decrease of the variance between *Null* and *Residual* explain that the model which consider all the variables in the model is better in order to make predictions.
+
+-   The model required 12 iterations of the Fisher Scoring algorithm to converge to the final parameter estimates, that in fact is a good results;
+
+```{r include=FALSE}
+glm_predictions <- predict(glm_model, dt_validation, type = "response")
+
+glm_pred <- ifelse(glm_predictions > 0.5, "TRUE", "FALSE")
+
+confusion_matrix <- table(Predicted = glm_pred, Actual = dt_validation$Revenue)
+
+print(confusion_matrix)
+
+predicted_class_glm <- ifelse(glm_predictions > 0.5, 1, 0)
+
+accuracy <- mean(predicted_class_glm == dt_validation$Revenue)
+
+precision <- sum(predicted_class_glm == 1 & dt_validation$Revenue == 1) / sum(predicted_class_glm == 1)
+
+recall <- sum(predicted_class_glm == 1 & dt_validation$Revenue == 1) / sum(dt_validation$Revenue == 1)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+result_matrix <- matrix(round(
+  c(accuracy,precision,recall,f1_score),4),
+  nrow = 1,
+  dimnames = list(NULL, c("Accuracy","Precision","Recall","F1-Score"))
+)
+cat("\n")
+print(result_matrix)
+
+
+```
+
+```         
+          Actual
+Predicted FALSE TRUE
+    FALSE  1628  195
+    TRUE     41  109
+
+     Accuracy Precision Recall F1-Score
+[1,]   0.8804    0.7267 0.3586   0.4802
+```
+
+-   **Accuracy**: 88% of the predictions made by the model were correct. It's a measure of overall model performance.
+
+-   **Precision**: when the model predicts a positive class (TRUE), it is correct approximately 72% of the time. It's a measure of the correctness of positive predictions.
+
+-   **Recall**: suggests that the model correctly identifies about 36% of the actual positive cases. It's a measure of the completeness of positive predictions.
+
+-   **F1-Score**: An F1-score reaches its best value at 1 and worst at 0, so we reached a medium result.
+
+Overall, the model seems to have decent performance. We try to see if with a lasso selection of the variables we can obtain better results.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+x <- as.matrix(dt_train[, -which(names(dt_train) == "Revenue")])
+y <- dt_train$Revenue
+lasso <- cv.glmnet(x, y, family = "binomial", alpha = 1)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+lasso_model <- glm(formula = Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + PageValues, family = "binomial", data = dt_train)
+summary(lasso_model)
+```
+
+```         
+Call:
+glm(formula = Revenue ~ ProductRelated + ProductRelated_Duration + 
+    ExitRates + PageValues, family = "binomial", data = dt_train)
+
+    Null deviance: 6802.5  on 7889  degrees of freedom
+Residual deviance: 4701.6  on 7885  degrees of freedom
+AIC: 4711.6
+
+Number of Fisher Scoring iterations: 7
+```
+
+the AIC and the variance show that the two models are so similar. We repeat the procedure of predictions, to see the behavior of this new model.
+
+```{r include=FALSE}
+lasso_predictions <- predict(lasso_model, dt_validation, type = "response")
+
+lasso_pred <- ifelse(lasso_predictions > 0.5, "TRUE", "FALSE")
+
+confusion_matrix <- table(Predicted = lasso_pred, Actual = dt_validation$Revenue)
+
+print(confusion_matrix)
+
+predicted_class_lasso <- ifelse(lasso_predictions > 0.5, 1, 0)
+
+accuracy <- mean(predicted_class_lasso == dt_validation$Revenue)
+
+precision <- sum(predicted_class_lasso == 1 & dt_validation$Revenue == 1) / sum(predicted_class_lasso == 1)
+
+recall <- sum(predicted_class_lasso == 1 & dt_validation$Revenue == 1) / sum(dt_validation$Revenue == 1)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+result_matrix <- matrix(round(
+  c(accuracy,precision,recall,f1_score),4),
+  nrow = 1,
+  dimnames = list(NULL, c("Accuracy","Precision","Recall","F1-Score"))
+)
+cat("\n")
+print(result_matrix)
+```
+
+```         
+          Actual
+Predicted FALSE TRUE
+    FALSE  1631  197
+    TRUE     38  107
+
+     Accuracy Precision Recall F1-Score
+[1,]   0.8809    0.7379  0.352   0.4766
+```
+
+The model trained with LASSO selection achieved results that were only slightly better than the initial model. We decided to use this model because it is also simpler to implement. But now, we implement our analysis with a LDA & QDA.
+
+## LDA
+
+```{r include=FALSE}
+lda_model <- lda(formula = Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + PageValues, data = dt_train)
+lda_model
+```
+
+Our rationale for selecting the same set of variables as logistic regression is twofold. Firstly, these variables have exhibited significant associations in our prior analysis. Secondly, by maintaining consistency in variable selection, we aim to establish a coherent analytical framework, facilitating seamless comparison and interpretation of results between the two methodologies.
+
+```         
+Call:
+lda(Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + 
+    PageValues, data = dt_train)
+
+Prior probabilities of groups:
+    FALSE      TRUE 
+0.8451204 0.1548796 
+```
+
+As we can see the prior probability of the class FALSE it's so much higher than the other class. to understand if this model it's better then the logistic regression model, we can use the same statistical index, starting from the confusion matrix.
+
+```{r include=FALSE}
+# Ottenere le predizioni dal modello LDA
+lda_predictions <- predict(lda_model, dt_validation, type = "response")
+lda_pred <- ifelse(lda_predictions$posterior[, "TRUE"] > 0.5, "TRUE", "FALSE")
+
+# Creare la matrice di confusione
+confusion_matrix <- table(Predicted = lda_pred, Actual = dt_validation$Revenue)
+print(confusion_matrix)
+
+# Calcolare l'accuratezza
+predicted_class_lda <- ifelse(lda_pred == "TRUE", 1, 0)
+accuracy_lda <- mean(predicted_class_lda == dt_validation$Revenue)
+
+# Calcolare precision, recall e f1_score
+precision <- sum(predicted_class_lda == 1 & dt_validation$Revenue == 1) / sum(predicted_class_lda == 1)
+recall <- sum(predicted_class_lda == 1 & dt_validation$Revenue == 1) / sum(dt_validation$Revenue == 1)
+f1_score <- 2 * precision * recall / (precision + recall)
+
+# Creare la matrice dei risultati
+result_matrix_lda <- matrix(round(c(accuracy_lda, precision, recall, f1_score), 4),
+                        nrow = 1,
+                        dimnames = list(NULL, c("Accuracy", "Precision", "Recall", "F1-Score")))
+
+cat("\n")
+print(result_matrix_lda)
+```
+
+\newpage
+
+```         
+          Actual
+Predicted FALSE TRUE
+    FALSE  1637  211
+    TRUE     32   93
+
+     Accuracy Precision Recall F1-Score
+[1,]   0.8768     0.744 0.3059   0.4336
+```
+
+in this case, we obtained similar result of the logistic regression.
+
+## QDA
+
+For the similar reasons specified for the LDA, we used the same features as before, with the following results:
+
+```{r include=FALSE}
+qda_model <- qda(Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + 
+    PageValues, data = dt_train)
+qda_model
+```
+
+```         
+Call:
+qda(Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + 
+    PageValues, data = dt_train)
+
+Prior probabilities of groups:
+    FALSE      TRUE 
+0.8451204 0.1548796 
+```
+
+```{r include=FALSE}
+# Ottenere le predizioni dal modello LDA
+qda_predictions <- predict(qda_model, dt_validation, type = "response")
+qda_pred <- ifelse(qda_predictions$posterior[, "TRUE"] > 0.5, "TRUE", "FALSE")
+
+# Creare la matrice di confusione
+confusion_matrix <- table(Predicted = qda_pred, Actual = dt_validation$Revenue)
+print(confusion_matrix)
+
+# Calcolare l'accuratezza
+predicted_class_qda <- ifelse(qda_pred == "TRUE", 1, 0)
+accuracy_qda <- mean(predicted_class_qda == dt_validation$Revenue)
+
+# Calcolare precision, recall e f1_score
+precision <- sum(predicted_class_qda == 1 & dt_validation$Revenue == 1) / sum(predicted_class_qda == 1)
+recall <- sum(predicted_class_qda == 1 & dt_validation$Revenue == 1) / sum(dt_validation$Revenue == 1)
+f1_score <- 2 * precision * recall / (precision + recall)
+
+# Creare la matrice dei risultati
+result_matrix_qda <- matrix(round(c(accuracy_qda, precision, recall, f1_score), 4),
+                        nrow = 1,
+                        dimnames = list(NULL, c("Accuracy", "Precision", "Recall", "F1-Score")))
+
+cat("\n")
+print(result_matrix_qda)
+```
+
+```         
+          Actual
+Predicted FALSE TRUE
+    FALSE  1586  163
+    TRUE     83  141
+
+     Accuracy Precision Recall F1-Score
+[1,]   0.8753    0.6295 0.4638   0.5341
+```
+
+Comparing the metrics for all four models obtained, we notice that the differences are truly minimal. To confidently determine which model to use in this case, we can resort to the ROC curve and AUC (Area Under the Curve).
+
+\newpage
+
+## ROC curve
+
+Calculating the ROC curves and the Area Under the Curve (AUC) for the validation set of each of the four models analyzed, we observe that all four achieve rather similar results, with a slightly higher AUC value for the model trained with QDA.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+true_labels <- dt_validation$Revenue
+
+roc_model1 <- roc(true_labels, predicted_class_glm)
+roc_model2 <- roc(true_labels, predicted_class_lasso)
+roc_model3 <- roc(true_labels, predicted_class_lda)
+roc_model4 <- roc(true_labels, predicted_class_qda)
+
+par(mfrow = c(2, 2))
+
+plot(roc_model1, col = "red", main = "GLM", legacy.axes = TRUE, print.auc = TRUE, xlab = "FPR", ylab = "TPR")
+
+plot(roc_model2, col = "blue", main = "LASSO", legacy.axes = TRUE, print.auc = TRUE, xlab = "FPR", ylab = "TPR")
+
+plot(roc_model3, col = "forestgreen", main = "LDA", legacy.axes = TRUE, print.auc = TRUE, xlab = "FPR", ylab = "TPR")
+
+plot(roc_model4, col = "darkorange", main = "QDA", legacy.axes = TRUE, print.auc = TRUE, xlab = "FPR", ylab = "TPR")
+
+par(mfrow = c(1, 1))
+```
+
+to do our predictions on the test set, we decide to use the the logistic regression model trained with the features choosed by the step-analysis (predictions in the appendix), and with the QDA model (that obatain better results in term of confusion matrix and AUC).
+
+\newpage
+
+# Predictions
+
+In order to complete our analysis, the final step is to apply the choosen model on the test set to make predictions about the variable `Revenue`. we decide to make prediction on the two best model founded after the analysis of the AUC. these models are:
+
+-   QDA with four features: `ProductRelated`, `ProductRelated_Duration`, `ExitRates`, `PageValues`. the first six predictions are presented here:
+
+| id_number | REVENUE_lda |
+|:---------:|:-----------:|
+|     1     |    FALSE    |
+|     2     |    TRUE     |
+|     3     |    FALSE    |
+|     4     |    FALSE    |
+|     5     |    FALSE    |
+|     6     |    TRUE     |
+
+-   GLM with six variables: `Informational`, `ProductRelated_Duration`, `BounceRates`, `ExitRates`, `PageValues`, `Month`, `VisitorType`, `Weekend`. Also in this case we showed the predictions for the first six observations, that results the same as before for the QDA model.
+
+| row_index | REVENUE_glm |
+|:---------:|:-----------:|
+|     1     |    FALSE    |
+|     2     |    TRUE     |
+|     3     |    FALSE    |
+|     4     |    FALSE    |
+|     5     |    FALSE    |
+|     6     |    TRUE     |
+
+For a complete view of the predictions about the test set tried with the two models, we create two Excel file that contain the test set and the added column `Revenue`, composed by the predictions made by the two models.
+
+\newpage
+
+# Appendix
+
+-   libraries used:
+
+```{r library, message=FALSE, warning=FALSE}
+library(skimr)
+library(DataExplorer)
+library(visdat)
+library(corrplot)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(psych)
+library(tidyr)
+library(caret)
+library(glmnet)
+library(MASS)
+library(naivebayes)
+library(ROCR)
+library(pROC)
+library(openxlsx)
+```
+
+-   data-loading:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=TRUE}
+online_shop <- read.csv("C:/Users/leona/Desktop/Università/DATA SCIENCE/Statistical Learning (6 cfu)/REPORT/online shoppers intention/data/online_shoppers_intention_train.csv", stringsAsFactors=TRUE)[,-c(1)]
+
+set.seed(123)
+
+#random extraction of the 80% of observations to dt_train
+train_index <- sample(seq_len(nrow(online_shop)), size = 0.8 * nrow(online_shop))
+dt_train <- online_shop[train_index, ]
+dt_validation <- online_shop[-train_index, ]
+attach(dt_train)
+
+dt_num <-  dt_train[,-c(10:18)]
+dt_scale <- scale(dt_num)
+
+
+dt_test <- read.csv("C:/Users/leona/Desktop/Università/DATA SCIENCE/Statistical Learning (6 cfu)/REPORT/online shoppers intention/data/online_shoppers_intention_test.csv")[-1]
+
+col_names <- names(dt_test)
+dt_test <- dt_test[, c(ncol(dt_test), 1:(ncol(dt_test)-1))]
+```
+
+-   numerical data and standardized data:
+
+```{r message=FALSE, warning=FALSE}
+dt_num <-  dt_train[,-c(10:18)]
+dt_scale <- scale(dt_num)
+```
+
+-   Transformation of the variables:
+
+```{r}
+dt_train$OperatingSystems <- as.factor(OperatingSystems)
+dt_train$Browser <- as.factor(Browser)
+dt_train$Region <- as.factor(Region)
+dt_train$TrafficType <- as.factor(TrafficType)
+dt_train$SpecialDay <- as.factor(SpecialDay)
+
+dt_validation$OperatingSystems <- as.factor(dt_validation$OperatingSystems)
+dt_validation$Browser <- as.factor(dt_validation$Browser)
+dt_validation$Region <- as.factor(dt_validation$Region)
+dt_validation$TrafficType <- as.factor(dt_validation$TrafficType)
+dt_validation$SpecialDay <- as.factor(dt_validation$SpecialDay)
+
+dt_test$OperatingSystems <- as.factor(dt_test$OperatingSystems)
+dt_test$Browser <- as.factor(dt_test$Browser)
+dt_test$Region <- as.factor(dt_test$Region)
+dt_test$TrafficType <- as.factor(dt_test$TrafficType)
+dt_test$SpecialDay <- as.factor(dt_test$SpecialDay)
+```
+
+-   searching for the best model:
+
+```{r message=FALSE, warning=FALSE}
+full_model <- glm(Revenue ~ ., data = dt_train, family = "binomial")
+summary(full_model)
+```
+
+```{r message=FALSE, warning=FALSE}
+reduced_model <- step(full_model, direction = "both", trace = FALSE)
+summary(reduced_model)
+```
+
+-   lasso selection:
+
+```{r message=FALSE, warning=FALSE}
+x <- as.matrix(dt_train[, -which(names(dt_train) == "Revenue")])
+y <- dt_train$Revenue
+lasso <- cv.glmnet(x, y, family = "binomial", alpha = 1)
+```
+
+```{r}
+summary(lasso_model)
+```
+
+-   fitting the LDA:
+
+```{r}
+lda_model <- lda(formula = Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + PageValues, data = dt_train)
+lda_model
+```
+
+-   fitting the QDA (balance):
+
+```{r}
+qda_model <- qda(formula = Revenue ~ ProductRelated + ProductRelated_Duration + ExitRates + PageValues, data = dt_train)
+qda_model
+```
+
+-   QDA - predictions:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+previsions <- predict(qda_model, newdata = dt_test)$posterior[,2]
+
+classification_df <- data.frame(REVENUE = as.factor(ifelse(previsions > 0.5, "TRUE", "FALSE")))
+
+dt_test$row_index <- seq_len(nrow(dt_test))
+classification_df$row_index <- seq_len(nrow(classification_df))
+
+results <- merge(dt_test, classification_df, by = "row_index")
+results <- results[ , !(names(results) %in% "row_index")]
+
+write.xlsx(results, "predictions_qda.xlsx")
+
+```
+
+-   GLM - predictions:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+previsions_glm <- predict(glm_model, newdata = dt_test, type = "response")
+
+classification_df_glm <- data.frame(REVENUE = as.factor(ifelse(previsions > 0.5, "TRUE", "FALSE")))
+
+dt_test$row_index <- seq_len(nrow(dt_test))
+classification_df_glm$row_index <- seq_len(nrow(classification_df_glm))
+
+results_glm <- merge(dt_test, classification_df_glm, by = "row_index")
+results <- results_glm[ , !(names(results_glm) %in% "row_index")]
+
+write.xlsx(results_glm, "predictions_glm.xlsx")
+```
