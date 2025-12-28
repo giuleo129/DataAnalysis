@@ -1,4 +1,24 @@
-Here are the data analyses for two different projects conducted in R:
+# DataAnalysis Projects (R)
 
-most_streamed_song_Spotify, where I used unsupervised learning techniques (cluster analysis, Principal Component Analysis) to identify trends in listener preferences.
-Online_shoppers_intention: in this case, through supervised learning, we tried to capture consumer habits on a website to predict whether a certain user X visiting the site will make a purchase or not.
+This repository contains two data analysis projects conducted in R, demonstrating exploratory analysis, statistical modeling, and predictive techniques.
+
+## Projects
+
+### 1. most_streamed_song_Spotify
+- **Objective:** Identify trends in listener preferences using Spotify streaming data.  
+- **Techniques:** Unsupervised learning – Cluster Analysis, Principal Component Analysis (PCA)  
+- **Outcome:** Grouped songs and listeners into meaningful clusters, uncovering patterns in music consumption.
+
+### 2. Online_shoppers_intention
+- **Objective:** Predict whether a website visitor will make a purchase based on browsing behavior.  
+- **Techniques:** Supervised learning – classification models  
+- **Outcome:** Built predictive models that estimate the probability of purchase, providing insights into consumer habits.
+
+## Tools & Technologies
+- R  
+- RStudio  
+- Statistical learning packages (e.g., caret, stats)  
+- Data visualization with ggplot2 and base R
+
+## Key Takeaway
+These projects demonstrate practical application of statistical and machine learning techniques in R for both exploratory and predictive data analysis.
